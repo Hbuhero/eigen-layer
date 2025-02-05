@@ -22,12 +22,16 @@ pragma solidity ^0.8.19;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 error TokenPool__ZeroAmount();
 error TokenPool__FailedTransfer();
 error TokenPool__NotOwner();
 
 contract TokenPool {
+    using MessageHashUtils for bytes32;
+    using ECDSA for bytes;
 
     uint256 private constant STAKE_PENALTY = 1 ether;
     string private constant MESSAGE_HASH_PREFIX = "\x19Ethereum Signed Message:\n32";
@@ -72,7 +76,7 @@ contract TokenPool {
         if (amountWithdrawn <= 0) revert TokenPool__ZeroAmount();
         balances[msg.sender] = 0;
 
-        IERC20(address(this)).transfer(msg.sender, amountWithdrawn);
+        IERC20(i_tokenAddress).transfer(msg.sender, amountWithdrawn);
 
         emit Unstaked(msg.sender);
     }
@@ -110,26 +114,28 @@ contract TokenPool {
         address staker,
         bytes memory signature,
         bytes32 messageHash
-        ) public {
-            bool isSlashed = verifySignature(messageHash, staker, signature);
+    ) public {
+            (bool isSlashed, ) = verifySignature(messageHash, staker, signature);
 
             slash(isSlashed, staker);
-        }
+    }
+
 
     function verifySignature(
         bytes32 messageHash,
         address staker,
         bytes memory signature
-    ) public pure returns (bool){
+    ) public pure returns (bool, address){
         bytes32 prefixedMessageHash = keccak256(abi.encodePacked(MESSAGE_HASH_PREFIX, messageHash));
         (uint8 v, bytes32 r, bytes32 s) = splitSignature(signature);
         address recoveredSigner = ecrecover(prefixedMessageHash, v, r, s);
-        return recoveredSigner == staker;
+        return (recoveredSigner == staker, recoveredSigner);
     }
 
     function slash (bool isSlashed, address staker) public {
         if (!isSlashed) {
             emit ValidStaker(staker);
+            return;
         }
 
         if (balances[staker] <= 0) revert TokenPool__ZeroAmount();
@@ -137,7 +143,7 @@ contract TokenPool {
         emit Slashed(staker);
     }
 
-    function splitSignature(bytes memory signature) internal pure returns (uint8 v, bytes32 r, bytes32 s){
+    function splitSignature(bytes memory signature) public pure returns (uint8 v, bytes32 r, bytes32 s){
         require(signature.length == 65, "invalid signature length");
 
         assembly {
