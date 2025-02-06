@@ -30,8 +30,7 @@ error TokenPool__FailedTransfer();
 error TokenPool__NotOwner();
 
 contract TokenPool {
-    using MessageHashUtils for bytes32;
-    using ECDSA for bytes;
+   
 
     uint256 private constant STAKE_PENALTY = 1 ether;
     string private constant MESSAGE_HASH_PREFIX = "\x19Ethereum Signed Message:\n32";
@@ -118,6 +117,16 @@ contract TokenPool {
             (bool isSlashed, ) = verifySignature(messageHash, staker, signature);
 
             slash(isSlashed, staker);
+    }
+
+    function usingLibs(
+        address staker,
+        bytes memory signature,
+        bytes32 messageHash
+    ) public returns (address, bool) {
+        bytes32 ethSignedMessageHash = MessageHashUtils.toEthSignedMessageHash(messageHash);
+        address signer = ECDSA.recover(ethSignedMessageHash, signature);
+        return (signer, signer == staker);
     }
 
 
