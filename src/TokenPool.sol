@@ -18,6 +18,7 @@
 // internal
 // private
 // view & pure functions
+// SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.19;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -47,7 +48,6 @@ contract TokenPool {
 
     modifier onlyOwner(){
         if (msg.sender != i_owner) revert TokenPool__NotOwner();
-
         _;
     }
 
@@ -91,6 +91,17 @@ contract TokenPool {
      * @notice The slashing functions only illustrates different ways of proving malicious activities but are not the actual implementation
      */
 
+    function slash (bool isSlashed, address staker) public {
+        if (!isSlashed) {
+            emit ValidStaker(staker);
+            return;
+        }
+
+        if (balances[staker] <= 0) revert TokenPool__ZeroAmount();
+        balances[staker] = 0;
+        emit Slashed(staker);
+    }
+
     function slashByTrustedOwner (address staker, bytes32[] calldata proof) public onlyOwner{
         if (balances[staker] <= 0) revert TokenPool__ZeroAmount();
         balances[staker] = 0;
@@ -119,17 +130,31 @@ contract TokenPool {
             slash(isSlashed, staker);
     }
 
-    function usingLibs(
+    /**
+     * @dev This is the function that uses "recover" function from ECDSA contract from Openzeppelin
+     * @param messageHash The message hash has to be changed to its proper format (EthSignedMessageHash) using the MessageHashUtils 
+     */
+    function verifySignatureUsingECDSA(
         address staker,
         bytes memory signature,
         bytes32 messageHash
-    ) public returns (address, bool) {
+    ) public pure returns (address, bool) {
         bytes32 ethSignedMessageHash = MessageHashUtils.toEthSignedMessageHash(messageHash);
         address signer = ECDSA.recover(ethSignedMessageHash, signature);
         return (signer, signer == staker);
     }
 
-
+    /**
+     * @dev The function below is uses "ecrecover" to get the address of the signer, along with the function "splitSignature".
+     * While it is useful, directly using it lack checks that are essential when verifying singatures. 
+     * 
+     * @notice The best practise is to use the ECDSA contract from Openzeppelin which comes with the function "recover" that does the same implementation.
+     * The ECDSA contract is audited hence safe to use and verify signature. See implementation of "recover" function in the above
+     * "verifySignatureUsingECDSA" function
+     * 
+     * @param messageHash This hash has to be converted to its proper format by concatinating it with the
+     * prefix "\x19Ethereum Signed Message:\n32"
+     */
     function verifySignature(
         bytes32 messageHash,
         address staker,
@@ -141,17 +166,10 @@ contract TokenPool {
         return (recoveredSigner == staker, recoveredSigner);
     }
 
-    function slash (bool isSlashed, address staker) public {
-        if (!isSlashed) {
-            emit ValidStaker(staker);
-            return;
-        }
-
-        if (balances[staker] <= 0) revert TokenPool__ZeroAmount();
-        balances[staker] = 0;
-        emit Slashed(staker);
-    }
-
+    /**
+     * @dev This function splits the signature to its individual values: v,r,s
+     * These values are then used in ecrecover to obtain the signer
+     */
     function splitSignature(bytes memory signature) public pure returns (uint8 v, bytes32 r, bytes32 s){
         require(signature.length == 65, "invalid signature length");
 

@@ -8,7 +8,7 @@ import {HelperConfig} from "./HelperConfig.s.sol";
 contract DeployTokenPool is Script{
     function run() external returns (TokenPool, MockERC20){
         HelperConfig helper = new HelperConfig();
-        (address mockToken, uint256 deployerKey) = helper.activeConfig();
+        (address mockToken, address deployerKey) = helper.activeConfig();
         vm.startBroadcast(deployerKey);
         TokenPool tokenPool = new TokenPool(address(mockToken));
         vm.stopBroadcast();
