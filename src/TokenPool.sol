@@ -125,7 +125,7 @@ contract TokenPool {
         bytes memory signature,
         bytes32 messageHash
     ) public {
-            (bool isSlashed, ) = verifySignature(messageHash, staker, signature);
+            bool isSlashed = verifySignature(messageHash, staker, signature);
 
             slash(isSlashed, staker);
     }
@@ -135,13 +135,12 @@ contract TokenPool {
      * @param messageHash The message hash has to be changed to its proper format (EthSignedMessageHash) using the MessageHashUtils 
      */
     function verifySignatureUsingECDSA(
-        address staker,
         bytes memory signature,
         bytes32 messageHash
-    ) public pure returns (address, bool) {
+    ) public pure returns (address) {
         bytes32 ethSignedMessageHash = MessageHashUtils.toEthSignedMessageHash(messageHash);
         address signer = ECDSA.recover(ethSignedMessageHash, signature);
-        return (signer, signer == staker);
+        return signer;
     }
 
     /**
@@ -159,11 +158,11 @@ contract TokenPool {
         bytes32 messageHash,
         address staker,
         bytes memory signature
-    ) public pure returns (bool, address){
+    ) public pure returns (bool){
         bytes32 prefixedMessageHash = keccak256(abi.encodePacked(MESSAGE_HASH_PREFIX, messageHash));
         (uint8 v, bytes32 r, bytes32 s) = splitSignature(signature);
         address recoveredSigner = ecrecover(prefixedMessageHash, v, r, s);
-        return (recoveredSigner == staker, recoveredSigner);
+        return recoveredSigner == staker;
     }
 
     /**

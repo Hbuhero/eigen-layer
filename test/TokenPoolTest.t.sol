@@ -81,14 +81,12 @@ contract TokenPoolTest is Test {
 
         // Act
         tokenPool.slashBySignatureVerification(ANVIL_DEFAULT_ADDRESS, signature, messageHash);
-        (, address recovered) =tokenPool.verifySignature(messageHash, ANVIL_DEFAULT_ADDRESS, signature);
-        console.log(recovered);
+        bool isSigner = tokenPool.verifySignature(messageHash, ANVIL_DEFAULT_ADDRESS, signature);
          (uint8 v1,bytes32 r1,)= tokenPool.splitSignature(signature);
 
         // Assert
         assertEq(tokenPool.balances(ANVIL_DEFAULT_ADDRESS), 0);
-        assertEq(v, v1);
-        assertEq(r, r1);
+        assert(isSigner);
         // string memory mnemonic = "test test test test test test test test test test test junk";
         // uint256 key = vm.deriveKey(mnemonic, 0);
         // address user = vm.addr(key);
@@ -118,7 +116,7 @@ contract TokenPoolTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ANVIL_DEFAULT_KEY, MessageHashUtils.toEthSignedMessageHash(messageHash));  // a cheatsheet used to return the r v s values of a signature by passing the address and messageHash
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        (address signer, bool cond) = tokenPool.verifySignatureUsingECDSA(ANVIL_DEFAULT_ADDRESS, signature, messageHash);
+        address signer = tokenPool.verifySignatureUsingECDSA(signature, messageHash);
         
         assertEq(signer, ANVIL_DEFAULT_ADDRESS);
     }
