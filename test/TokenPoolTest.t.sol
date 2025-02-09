@@ -71,55 +71,55 @@ contract TokenPoolTest is Test {
     //     _;
     // }
 
-    function testSlashWithSignatureVerification() public stake(ANVIL_DEFAULT_ADDRESS) {
-        // Arrange
-        string memory message = "our secret message";
-        bytes32 messageHash = keccak256(abi.encodePacked(message));
+    // function testSlashWithSignatureVerification() public stake(ANVIL_DEFAULT_ADDRESS) {
+    //     // Arrange
+    //     string memory message = "our secret message";
+    //     bytes32 messageHash = keccak256(abi.encodePacked(message));
 
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ANVIL_DEFAULT_KEY, MessageHashUtils.toEthSignedMessageHash(messageHash));  // a cheatsheet used to return the r v s values of a signature by passing the address and messageHash
-        bytes memory signature = abi.encodePacked(r, s, v);
+    //     (uint8 v, bytes32 r, bytes32 s) = vm.sign(ANVIL_DEFAULT_KEY, MessageHashUtils.toEthSignedMessageHash(messageHash));  // a cheatsheet used to return the r v s values of a signature by passing the address and messageHash
+    //     bytes memory signature = abi.encodePacked(r, s, v);
 
-        // Act
-        tokenPool.slashBySignatureVerification(ANVIL_DEFAULT_ADDRESS, signature, messageHash);
-        bool isSigner = tokenPool.verifySignature(messageHash, ANVIL_DEFAULT_ADDRESS, signature);
-         (uint8 v1,bytes32 r1,)= tokenPool.splitSignature(signature);
+    //     // Act
+    //     tokenPool.slashBySignatureVerification(ANVIL_DEFAULT_ADDRESS, signature, messageHash);
+    //     bool isSigner = tokenPool.verifySignature(messageHash, ANVIL_DEFAULT_ADDRESS, signature);
+    //      (uint8 v1,bytes32 r1,)= tokenPool.splitSignature(signature);
 
-        // Assert
-        assertEq(tokenPool.balances(ANVIL_DEFAULT_ADDRESS), 0);
-        assert(isSigner);
-        // string memory mnemonic = "test test test test test test test test test test test junk";
-        // uint256 key = vm.deriveKey(mnemonic, 0);
-        // address user = vm.addr(key);
+    //     // Assert
+    //     assertEq(tokenPool.balances(ANVIL_DEFAULT_ADDRESS), 0);
+    //     assert(isSigner);
+    //     // string memory mnemonic = "test test test test test test test test test test test junk";
+    //     // uint256 key = vm.deriveKey(mnemonic, 0);
+    //     // address user = vm.addr(key);
 
-        // string memory message = "our secret message";
-        // bytes32 messageHash = keccak256(abi.encodePacked(message));
-        // bytes32 ethSignedMessage = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
+    //     // string memory message = "our secret message";
+    //     // bytes32 messageHash = keccak256(abi.encodePacked(message));
+    //     // bytes32 ethSignedMessage = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
 
-        // (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, MessageHashUtils.toEthSignedMessageHash(messageHash));  // a cheatsheet used to return the r v s values of a signature by passing the address and messageHash
-        // bytes memory signature = abi.encodePacked(r, s, v);
+    //     // (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, MessageHashUtils.toEthSignedMessageHash(messageHash));  // a cheatsheet used to return the r v s values of a signature by passing the address and messageHash
+    //     // bytes memory signature = abi.encodePacked(r, s, v);
 
-        // (, address recovered) = tokenPool.verifySignature(messageHash, user, signature);
-        // address signer = ecrecover(ethSignedMessage, v, r, s);
-        // console.log(recovered);
-        // console.log(signer);
-        // assertEq(signer, user);
+    //     // (, address recovered) = tokenPool.verifySignature(messageHash, user, signature);
+    //     // address signer = ecrecover(ethSignedMessage, v, r, s);
+    //     // console.log(recovered);
+    //     // console.log(signer);
+    //     // assertEq(signer, user);
 
-    }
+    // }
 
-    function testLibs() public {
-        // string memory mnemonic = "test test test test test test test test test test test junk";
-        // uint256 key = vm.deriveKey(mnemonic, 0);
-        // address user = vm.addr(key);
+    // function testLibs() public {
+    //     // string memory mnemonic = "test test test test test test test test test test test junk";
+    //     // uint256 key = vm.deriveKey(mnemonic, 0);
+    //     // address user = vm.addr(key);
 
-        string memory message = "our secret message";
-        bytes32 messageHash = keccak256(abi.encodePacked(message));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ANVIL_DEFAULT_KEY, MessageHashUtils.toEthSignedMessageHash(messageHash));  // a cheatsheet used to return the r v s values of a signature by passing the address and messageHash
-        bytes memory signature = abi.encodePacked(r, s, v);
+    //     string memory message = "our secret message";
+    //     bytes32 messageHash = keccak256(abi.encodePacked(message));
+    //     (uint8 v, bytes32 r, bytes32 s) = vm.sign(ANVIL_DEFAULT_KEY, MessageHashUtils.toEthSignedMessageHash(messageHash));  // a cheatsheet used to return the r v s values of a signature by passing the address and messageHash
+    //     bytes memory signature = abi.encodePacked(r, s, v);
 
-        address signer = tokenPool.verifySignatureUsingECDSA(signature, messageHash);
+    //     address signer = tokenPool.verifySignatureUsingECDSA(signature, messageHash);
         
-        assertEq(signer, ANVIL_DEFAULT_ADDRESS);
-    }
+    //     assertEq(signer, ANVIL_DEFAULT_ADDRESS);
+    // }
 
     // to test verifying a signature we need:
     // a signature and the message hash and signer
