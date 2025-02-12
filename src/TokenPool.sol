@@ -31,9 +31,9 @@ error TokenPool__ZeroAmount();
 error TokenPool__FailedTransfer();
 error TokenPool__NotOwner();
 error TokenPool__StakerIsSlashed();
+error TokenPool__InvalidSlasherForStaker();
 
 contract TokenPool {
-   
 
     uint256 private constant STAKE_PENALTY = 1 ether;
     string private constant MESSAGE_HASH_PREFIX = "\x19Ethereum Signed Message:\n32";
@@ -60,15 +60,18 @@ contract TokenPool {
     }
     
 
-    function stake (uint256 amount, address slasherContract) public {
+    function stake (uint256 amount) public {
         address sender = msg.sender;
 
-        if(balances[msg.sender] > 0) {
-            _stake(amount, sender);
-        }else {
-            _stake(amount, sender);
-            enroll(slasherContract);
-        }
+        if (amount <= 0) revert TokenPool__ZeroAmount();
+
+        // implement ERC20 token transfer logics. Test in net if works
+        bool success = IERC20(i_tokenAddress).transferFrom(sender, address(this), amount);
+        balances[sender] = amount;
+
+        if (!success) revert TokenPool__FailedTransfer();
+
+        emit Staked(sender);
     }
 
     function withdraw () public {
@@ -84,8 +87,27 @@ contract TokenPool {
         _withdraw(staker);
     }
 
-    function enroll(address slasherContract) public onlyOwner {
+    function enroll(address slasherContract) public {
+        if (balances[msg.sender] == 0) revert TokenPool__ZeroAmount();
+
         IERC20(i_tokenAddress).approve(slasherContract, balances[msg.sender]);
+        slasher[msg.sender].push(slasherContract);
+    }
+
+    function slash(address staker) external {
+        uint256 length = slasher[staker].length;
+        address slasherAddress = msg.sender;
+
+        for (uint256 i; i < length; i++){
+            address slasherContract = slasher[staker][i];
+            if (Slasher(slasherContract).isSlashed(staker) && slasherContract == slasherAddress) {
+                balances[staker] = 0;
+                emit Slashed(staker);
+                return;
+            }
+        }
+
+        revert TokenPool__InvalidSlasherForStaker();
     }
 
     function _withdraw(address staker) internal {
