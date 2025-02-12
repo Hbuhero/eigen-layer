@@ -45,7 +45,7 @@ contract HelperConfig is Script {
         return NetworkConfig({
             tokenAddress: 0xdd13E55209Fd76AfE204dBda4007C227904f0a81,
             deployerKey: 0xCE3CEEB3AB15E50aB502c406330fE99b16216fDB
-            // deployerKey: vm.envUint(name);
+            // deployerKey: vm.envUint(namee);
 
         });
     }
