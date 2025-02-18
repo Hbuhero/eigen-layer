@@ -82,16 +82,18 @@ contract TokenPool {
     }
 
     function withdraw () public {
-        address staker = msg.sender;
-        uint256 length = slasher[staker].length;
+        address operator = delegation[msg.sender];
+        
+        uint256 length = slasher[operator].length;
 
-        // for (uint256 i; i < length; i++){
-        //     address slasherContract = slasher[staker][i];
-        //     if (Slasher(slasherContract).isSlashed(staker)) {
-        //         revert TokenPool__StakerIsSlashed();
-        //     }
-        // }
-        _withdraw(staker);
+        for (uint256 i; i < length; i++){
+            address slasherContract = slasher[operator][i];
+            if (Slasher(slasherContract).isOperatorSlashed(operator)) {
+                stakerBalance[msg.sender] = 0;
+                revert TokenPool__StakerIsSlashed();
+            }
+        }
+        _withdraw(msg.sender, operator);
     }
 
     function delegateTo (address operator) public {
@@ -130,18 +132,18 @@ contract TokenPool {
     }
 
     // update this to work with both staker and delegator
-    function slash(address staker) external {
-        uint256 length = slasher[staker].length;
+    function slash(address operator) external {
+        uint256 length = slasher[operator].length;
         address slasherAddress = msg.sender;
 
-        // for (uint256 i; i < length; i++){
-        //     address slasherContract = slasher[staker][i];
-        //     if (Slasher(slasherContract).isSlashed(staker) && slasherContract == slasherAddress) {
-        //         stakerBalance[staker] = 0;
-        //         emit Slashed(staker);
-        //         return;
-        //     }
-        // }
+        for (uint256 i; i < length; i++){
+            address slasherContract = slasher[operator][i];
+            if (Slasher(slasherContract).isOperatorSlashed(operator) && slasherContract == slasherAddress) {
+                operatorBalance[operator] = 0;
+                emit Slashed(operator);
+                return;
+            }
+        }
 
         revert TokenPool__InvalidSlasher();
     }
@@ -163,11 +165,12 @@ contract TokenPool {
         return false;
     }
 
-    function _withdraw(address staker) internal {
+    function _withdraw(address staker, address operator) internal {
         uint256 amountWithdrawn = stakerBalance[staker];
         if (amountWithdrawn <= 0) revert TokenPool__ZeroBalance();
         stakerBalance[staker] = 0;
-
+        operatorBalance[operator] -= amountWithdrawn;
+        delete delegation[staker];
         IERC20(i_tokenAddress).transfer(staker, amountWithdrawn);
 
         emit Unstaked(staker);
