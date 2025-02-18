@@ -15,6 +15,7 @@ contract TokenPoolTest is Test {
     Slasher public slasher;
     MockERC20 public mockERC20;
     address public USER = address(1);
+    address public OPERATOR = address(2);
     uint256 public stakingAmount = 2 ether;
     address public constant ANVIL_DEFAULT_ADDRESS = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
     uint256 ANVIL_DEFAULT_KEY = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
@@ -34,8 +35,20 @@ contract TokenPoolTest is Test {
         mockERC20.mint(ANVIL_DEFAULT_ADDRESS, 2 ether);
         mockERC20.approve(address(tokenPool), stakingAmount);
         tokenPool.stake(stakingAmount);
-        tokenPool.enroll(address(slasher));
         vm.stopPrank();
+        _;
+    }
+
+    modifier delegate(){
+        vm.startPrank(USER);
+        tokenPool.delegateTo(OPERATOR);
+        vm.stopPrank();
+        _;
+    }
+
+    modifier enroll(){
+        vm.prank(OPERATOR);
+        tokenPool.enroll(address(slasher));
         _;
     }
 
@@ -102,5 +115,56 @@ contract TokenPoolTest is Test {
         vm.prank(address(slasher1));
         vm.expectRevert();
         tokenPool.slash(USER);
+    }
+
+    function testExit() public stake(USER) delegate(){
+        //Arrange
+        Slasher slasher1 = new Slasher();
+        Slasher slasher2 = new Slasher();
+        Slasher slasher3 = new Slasher();
+
+        vm.startPrank(OPERATOR);
+        tokenPool.enroll(address(slasher));
+        tokenPool.enroll(address(slasher1));
+        tokenPool.enroll(address(slasher2));
+        tokenPool.enroll(address(slasher3));
+        vm.stopPrank();
+
+        console.log(tokenPool.getOperatorSlashers(OPERATOR)[2]);
+
+        // Act
+        vm.prank(OPERATOR);
+        tokenPool.exit(address(slasher2));
+
+        //assert
+        bool test = tokenPool.isValidSlasher(address(slasher2), OPERATOR);
+        assertEq(test, false);
+    }
+
+    
+
+    function testExitWithWrongSlasher() public stake(USER) delegate(){
+        //Arrange
+        Slasher slasher1 = new Slasher();
+        Slasher slasher2 = new Slasher();
+        Slasher slasher3 = new Slasher();
+
+        vm.startPrank(OPERATOR);
+        tokenPool.enroll(address(slasher));
+        tokenPool.enroll(address(slasher1));
+        tokenPool.enroll(address(slasher2));
+        tokenPool.enroll(address(slasher3));
+        vm.stopPrank();
+
+        console.log(tokenPool.getOperatorSlashers(OPERATOR)[2]);
+
+        // Act
+        vm.startPrank(OPERATOR);
+        tokenPool.exit(address(slasher1));
+        vm.expectRevert();
+        tokenPool.exit(address(slasher1));
+        vm.stopPrank();
+
+        
     }
 }

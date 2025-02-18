@@ -15,7 +15,7 @@ error Slasher__NotOwner();
 contract Slasher {
     address public immutable i_owner;
     
-    mapping (address operator => bool slashed) public isSlashed;
+    mapping (address operator => bool slashed) private isSlashed;
 
     modifier onlyOwner(){
         if (msg.sender != i_owner) revert Slasher__NotOwner();
@@ -34,6 +34,10 @@ contract Slasher {
     function slash(address operator, address tokenPool) public onlyOwner{
         isSlashed[operator] = true;
         TokenPool(tokenPool).slash(operator);
+    }
+
+    function isOperatorSlashed(address operator) public view returns(bool){
+        return isSlashed[operator];
     }
 
     

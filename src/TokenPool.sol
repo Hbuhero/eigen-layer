@@ -27,23 +27,23 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {Slasher} from "./Slasher.sol";
 
-error TokenPool__ZeroAmount();
+error TokenPool__ZeroBalance();
 error TokenPool__FailedTransfer();
 error TokenPool__NotOwner();
 error TokenPool__StakerIsSlashed();
-error TokenPool__InvalidSlasherForStaker();
+error TokenPool__InvalidSlasher();
 error TokenPool__InvalidOperator();
+error TokenPool__StakerHasDelegation();
+error TokenPool__IsSlashed();
 
 contract TokenPool {
-
-    string private constant MESSAGE_HASH_PREFIX = "\x19Ethereum Signed Message:\n32";
 
     address private immutable i_tokenAddress;
     address private immutable i_owner;
 
-    mapping(address staker => uint256 stakerBalance) private stakerBalance;
-    mapping(address staker => uint256 stakerBalance) private operatorBalance;
-    mapping(address staker => address[] allowedSlashers) private slasher;
+    mapping(address staker => uint256 balance) private stakerBalance;
+    mapping(address operator => uint256 stakerBalance) private operatorBalance;
+    mapping(address operator => address[] allowedSlashers) private slasher;
     mapping(address staker => address operator) private delegation;
 
     event Staked(address indexed staker);
@@ -70,7 +70,7 @@ contract TokenPool {
     function stake (uint256 amount) public {
         address sender = msg.sender;
 
-        if (amount <= 0) revert TokenPool__ZeroAmount();
+        if (amount <= 0) revert TokenPool__ZeroBalance();
 
         // implement ERC20 token transfer logics. Test in net if works
         bool success = IERC20(i_tokenAddress).transferFrom(sender, address(this), amount);
@@ -85,48 +85,74 @@ contract TokenPool {
         address staker = msg.sender;
         uint256 length = slasher[staker].length;
 
-        for (uint256 i; i < length; i++){
-            address slasherContract = slasher[staker][i];
-            if (Slasher(slasherContract).isSlashed(staker)) {
-                revert TokenPool__StakerIsSlashed();
-            }
-        }
+        // for (uint256 i; i < length; i++){
+        //     address slasherContract = slasher[staker][i];
+        //     if (Slasher(slasherContract).isSlashed(staker)) {
+        //         revert TokenPool__StakerIsSlashed();
+        //     }
+        // }
         _withdraw(staker);
     }
 
-    function delegateTo (address operator) public {}
+    function delegateTo (address operator) public {
+        address staker = msg.sender;
+        uint256 balance = stakerBalance[staker];
 
-    function enroll(address slasherContract) public {
-        if (stakerBalance[msg.sender] == 0) revert TokenPool__ZeroAmount();
+        if (balance <= 0) revert TokenPool__ZeroBalance();
 
-        IERC20(i_tokenAddress).approve(slasherContract, stakerBalance[msg.sender]);
+        if (delegation[staker] != address(0)) revert TokenPool__StakerHasDelegation();
+
+        delegation[staker] = operator;
+        operatorBalance[operator] += balance;
+    }
+
+    function enroll(address slasherContract) public operatorOnly{
+        if (operatorBalance[msg.sender] == 0) revert TokenPool__ZeroBalance();
+
         slasher[msg.sender].push(slasherContract);
     }
 
-    function exit(address slasher) public operatorOnly {}
+    function exit(address slasherAddress) public operatorOnly {
+        if (!isValidSlasher(slasherAddress, msg.sender)) revert TokenPool__InvalidSlasher();
 
+        if (Slasher(slasherAddress).isOperatorSlashed(msg.sender)) revert TokenPool__IsSlashed();
+        address[] memory slasherAddresses = slasher[msg.sender];
+        uint256 length = slasherAddresses.length;
+
+        for(uint256 i = 0; i < length; i++){
+            if(slasherAddresses[i] == slasherAddress){
+                slasher[msg.sender][i] = slasher[msg.sender][length-1];
+                slasher[msg.sender].pop();
+                break;
+            }
+        }
+
+    }
+
+    // update this to work with both staker and delegator
     function slash(address staker) external {
         uint256 length = slasher[staker].length;
         address slasherAddress = msg.sender;
 
-        for (uint256 i; i < length; i++){
-            address slasherContract = slasher[staker][i];
-            if (Slasher(slasherContract).isSlashed(staker) && slasherContract == slasherAddress) {
-                stakerBalance[staker] = 0;
-                emit Slashed(staker);
-                return;
-            }
-        }
+        // for (uint256 i; i < length; i++){
+        //     address slasherContract = slasher[staker][i];
+        //     if (Slasher(slasherContract).isSlashed(staker) && slasherContract == slasherAddress) {
+        //         stakerBalance[staker] = 0;
+        //         emit Slashed(staker);
+        //         return;
+        //     }
+        // }
 
-        revert TokenPool__InvalidSlasherForStaker();
+        revert TokenPool__InvalidSlasher();
     }
 
-    function isValidSlasher(address slasherAddress, address staker) public view returns (bool){
-        uint256 length = slasher[staker].length;
+    // this too
+    function isValidSlasher(address slasherAddress, address operator) public view returns (bool){
+        uint256 length = slasher[operator].length;
 
-        for (uint256 i; i < length; i++){
+        for (uint256 i = 0; i < length; i++){
 
-            address slasherContract = slasher[staker][i];
+            address slasherContract = slasher[operator][i];
 
             if (slasherContract == slasherAddress) {
                 
@@ -135,6 +161,28 @@ contract TokenPool {
         }
 
         return false;
+    }
+
+    function _withdraw(address staker) internal {
+        uint256 amountWithdrawn = stakerBalance[staker];
+        if (amountWithdrawn <= 0) revert TokenPool__ZeroBalance();
+        stakerBalance[staker] = 0;
+
+        IERC20(i_tokenAddress).transfer(staker, amountWithdrawn);
+
+        emit Unstaked(staker);
+    }
+
+    function _stake(uint256 amount, address sender) internal {
+        if (amount <= 0) revert TokenPool__ZeroBalance();
+
+        // implement ERC20 token transfer logics. Test in net if works
+        bool success = IERC20(i_tokenAddress).transferFrom(sender, address(this), amount);
+        stakerBalance[sender] = amount;
+
+        if (!success) revert TokenPool__FailedTransfer();
+
+        emit Staked(sender);
     }
 
     function getStakerBalance(address staker) public view returns (uint256) {
@@ -151,27 +199,9 @@ contract TokenPool {
 
     function getOwnerAddress() public view returns (address){
         return i_owner;
-    } 
-
-    function _withdraw(address staker) internal {
-        uint256 amountWithdrawn = stakerBalance[staker];
-        if (amountWithdrawn <= 0) revert TokenPool__ZeroAmount();
-        stakerBalance[staker] = 0;
-
-        IERC20(i_tokenAddress).transfer(staker, amountWithdrawn);
-
-        emit Unstaked(staker);
     }
 
-    function _stake(uint256 amount, address sender) internal {
-        if (amount <= 0) revert TokenPool__ZeroAmount();
-
-        // implement ERC20 token transfer logics. Test in net if works
-        bool success = IERC20(i_tokenAddress).transferFrom(sender, address(this), amount);
-        stakerBalance[sender] = amount;
-
-        if (!success) revert TokenPool__FailedTransfer();
-
-        emit Staked(sender);
+    function getOperatorSlashers(address operator) public view returns(address[] memory){
+        return slasher[operator];
     }
 }
