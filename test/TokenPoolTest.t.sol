@@ -58,9 +58,9 @@ contract TokenPoolTest is Test {
 
     function testStaker() public {}
 
-    function testWithdrawByMaliceousStaker() public stake(USER){
+    function testWithdrawByStakerOfMaliciousOperator() public stake(USER) delegate() enroll(){
         //arrange
-        slasher.slash(USER, address(tokenPool));
+        slasher.slash(OPERATOR, address(tokenPool));
         // slasher.setIsSlashedToTrue(USER);
 
         // act and assert
@@ -82,8 +82,15 @@ contract TokenPoolTest is Test {
 
     function testEnroll() public stake(USER){
         // arrage 
-        bool isSlasher = tokenPool.isValidSlasher(address(slasher), USER);
+        vm.prank(USER);
+        tokenPool.delegateTo(OPERATOR);
+
+        // Act 
+        vm.prank(OPERATOR);
+        tokenPool.enroll(address(slasher));
+
         // assert
+        bool isSlasher = tokenPool.isValidSlasher(address(slasher), OPERATOR);
         assertEq(isSlasher, true);
     }
 
@@ -94,27 +101,29 @@ contract TokenPoolTest is Test {
         tokenPool.enroll(address(slasher));
     }
 
-    function testSlashWithValidSlasher() public stake(USER) {
+    function testSlashWithValidSlasher() public stake(USER) delegate() enroll() {
         //arrange
-        slasher.slash(USER, address(tokenPool));
+        slasher.slash(OPERATOR, address(tokenPool));
 
         // Act
         vm.prank(address(slasher));
-        tokenPool.slash(USER);
+        tokenPool.slash(OPERATOR);
 
         // Assert
-        assertEq(tokenPool.getStakerBalance(USER), 0);
+        // assertEq(tokenPool.getStakerBalance(USER), 0);
+        assertEq(tokenPool.getOperatorBalance(OPERATOR), 0);
+
     }
 
-    function testSlashWithInvalidSlasher() public stake(USER) {
+    function testSlashWithInvalidSlasher() public stake(USER) delegate() enroll() {
         // arrange 
-        slasher.slash(USER, address(tokenPool));
+        slasher.slash(OPERATOR, address(tokenPool));
         Slasher slasher1 = new Slasher();
 
         // Act & Assert
         vm.prank(address(slasher1));
         vm.expectRevert();
-        tokenPool.slash(USER);
+        tokenPool.slash(OPERATOR);
     }
 
     function testExit() public stake(USER) delegate(){
@@ -164,7 +173,13 @@ contract TokenPoolTest is Test {
         vm.expectRevert();
         tokenPool.exit(address(slasher1));
         vm.stopPrank();
+    }
 
-        
+    function testDelegate() public stake(USER){
+        // Act
+        vm.prank(USER);
+        tokenPool.delegateTo(OPERATOR);
+
+        assert(tokenPool.getOperatorBalance(OPERATOR) > 0);
     }
 }

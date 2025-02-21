@@ -83,6 +83,11 @@ contract TokenPool {
 
     function withdraw () public {
         address operator = delegation[msg.sender];
+
+        if (operator == address(0)) {
+            _withdrawUndelegated(msg.sender);
+            return;
+        }
         
         uint256 length = slasher[operator].length;
 
@@ -176,6 +181,15 @@ contract TokenPool {
         emit Unstaked(staker);
     }
 
+    function _withdrawUndelegated(address staker) internal {
+        uint256 amountWithdrawn = stakerBalance[staker];
+        if (amountWithdrawn <= 0) revert TokenPool__ZeroBalance();
+        stakerBalance[staker] = 0;
+        IERC20(i_tokenAddress).transfer(staker, amountWithdrawn);
+
+        emit Unstaked(staker);
+    }
+
     function _stake(uint256 amount, address sender) internal {
         if (amount <= 0) revert TokenPool__ZeroBalance();
 
@@ -192,8 +206,8 @@ contract TokenPool {
         return stakerBalance[staker];
     }
 
-    function getOperatorBalance(address staker) public view returns (uint256) {
-        return stakerBalance[staker];
+    function getOperatorBalance(address operator) public view returns (uint256) {
+        return operatorBalance[operator];
     }
 
     function getTokenAddress() public view returns (address){
@@ -208,3 +222,7 @@ contract TokenPool {
         return slasher[operator];
     }
 }
+// in this model a home staker has to stake and delegate to itself to contribute to eigen layer
+// since the enroll function is access controlled to operators only, delegation is mandatory to a staker
+// for safety of users assests, a staker who didnt delegate can ultimately withdraw if no longer wish to 
+// participate (self delegate or otherwise) 
