@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.19;
 
-import {TokenPool} from "./TokenPool.sol";
+import {DelegationManager} from "./DelegationManager.sol";
 
 error Slasher__NotOwner();
 
@@ -14,6 +14,7 @@ error Slasher__NotOwner();
  */
 contract Slasher {
     address public immutable i_owner;
+    address private immutable i_delegationManager;
     
     mapping (address operator => bool slashed) private isSlashed;
 
@@ -22,8 +23,9 @@ contract Slasher {
         _;
     }
 
-    constructor () {
+    constructor (address delegationManager) {
         i_owner = msg.sender;
+        i_delegationManager = delegationManager;
     }
 
     /**
@@ -31,9 +33,9 @@ contract Slasher {
      * @notice This slash function assumes a trusted entity with permission to slash. A more decentralized approach
      * will be submitting and verifying proof about the misconduct of the staker
      */
-    function slash(address operator, address tokenPool) public onlyOwner{
+    function slash(address operator) public onlyOwner{
         isSlashed[operator] = true;
-        TokenPool(tokenPool).slash(operator);
+        DelegationManager(i_delegationManager).slash(operator);
     }
 
     function isOperatorSlashed(address operator) public view returns(bool){

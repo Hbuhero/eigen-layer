@@ -26,6 +26,7 @@ import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProo
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {Slasher} from "./Slasher.sol";
+import {DelegationManager} from "./DelegationManager.sol";
 
 error TokenPool__ZeroBalance();
 error TokenPool__FailedTransfer();
@@ -40,30 +41,25 @@ contract TokenPool {
 
     address private immutable i_tokenAddress;
     address private immutable i_owner;
+    address private immutable i_delegationManager;
 
     mapping(address staker => uint256 balance) private stakerBalance;
-    mapping(address operator => uint256 stakerBalance) private operatorBalance;
-    mapping(address operator => address[] allowedSlashers) private slasher;
-    mapping(address staker => address operator) private delegation;
+    
 
     event Staked(address indexed staker);
     event Unstaked(address indexed staker);
-    event Slashed(address indexed staker);
-    event ValidStaker(address indexed staker);
 
     modifier onlyOwner(){
         if (msg.sender != i_owner) revert TokenPool__NotOwner();
         _;
     }
 
-    modifier operatorOnly(){
-        if (operatorBalance[msg.sender] <= 0) revert TokenPool__InvalidOperator();
-        _;
-    }
+    
 
-    constructor (address tokenAddress) {
+    constructor (address tokenAddress, address delegationManager) {
         i_tokenAddress = tokenAddress;
         i_owner = msg.sender;
+        i_delegationManager = delegationManager;
     }
     
 
@@ -82,17 +78,17 @@ contract TokenPool {
     }
 
     function withdraw () public {
-        address operator = delegation[msg.sender];
+        address operator = DelegationManager(i_delegationManager).getOperator(msg.sender);
 
         if (operator == address(0)) {
             _withdrawUndelegated(msg.sender);
             return;
         }
         
-        uint256 length = slasher[operator].length;
+        uint256 length = DelegationManager(i_delegationManager).getOperatorSlashers(operator).length;
 
         for (uint256 i; i < length; i++){
-            address slasherContract = slasher[operator][i];
+            address slasherContract = DelegationManager(i_delegationManager).getOperatorSlashers(operator)[i];
             if (Slasher(slasherContract).isOperatorSlashed(operator)) {
                 stakerBalance[msg.sender] = 0;
                 revert TokenPool__StakerIsSlashed();
@@ -101,81 +97,11 @@ contract TokenPool {
         _withdraw(msg.sender, operator);
     }
 
-    function delegateTo (address operator) public {
-        address staker = msg.sender;
-        uint256 balance = stakerBalance[staker];
-
-        if (balance <= 0) revert TokenPool__ZeroBalance();
-
-        if (delegation[staker] != address(0)) revert TokenPool__StakerHasDelegation();
-
-        delegation[staker] = operator;
-        operatorBalance[operator] += balance;
-    }
-
-    function enroll(address slasherContract) public operatorOnly{
-        if (operatorBalance[msg.sender] == 0) revert TokenPool__ZeroBalance();
-
-        slasher[msg.sender].push(slasherContract);
-    }
-
-    function exit(address slasherAddress) public operatorOnly {
-        if (!isValidSlasher(slasherAddress, msg.sender)) revert TokenPool__InvalidSlasher();
-
-        if (Slasher(slasherAddress).isOperatorSlashed(msg.sender)) revert TokenPool__IsSlashed();
-        address[] memory slasherAddresses = slasher[msg.sender];
-        uint256 length = slasherAddresses.length;
-
-        for(uint256 i = 0; i < length; i++){
-            if(slasherAddresses[i] == slasherAddress){
-                slasher[msg.sender][i] = slasher[msg.sender][length-1];
-                slasher[msg.sender].pop();
-                break;
-            }
-        }
-
-    }
-
-    // update this to work with both staker and delegator
-    function slash(address operator) external {
-        uint256 length = slasher[operator].length;
-        address slasherAddress = msg.sender;
-
-        for (uint256 i; i < length; i++){
-            address slasherContract = slasher[operator][i];
-            if (Slasher(slasherContract).isOperatorSlashed(operator) && slasherContract == slasherAddress) {
-                operatorBalance[operator] = 0;
-                emit Slashed(operator);
-                return;
-            }
-        }
-
-        revert TokenPool__InvalidSlasher();
-    }
-
-    // this too
-    function isValidSlasher(address slasherAddress, address operator) public view returns (bool){
-        uint256 length = slasher[operator].length;
-
-        for (uint256 i = 0; i < length; i++){
-
-            address slasherContract = slasher[operator][i];
-
-            if (slasherContract == slasherAddress) {
-                
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     function _withdraw(address staker, address operator) internal {
         uint256 amountWithdrawn = stakerBalance[staker];
         if (amountWithdrawn <= 0) revert TokenPool__ZeroBalance();
         stakerBalance[staker] = 0;
-        operatorBalance[operator] -= amountWithdrawn;
-        delete delegation[staker];
+        DelegationManager(i_delegationManager).removeDelegation(staker ,operator, amountWithdrawn);
         IERC20(i_tokenAddress).transfer(staker, amountWithdrawn);
 
         emit Unstaked(staker);
@@ -202,12 +128,10 @@ contract TokenPool {
         emit Staked(sender);
     }
 
+
+
     function getStakerBalance(address staker) public view returns (uint256) {
         return stakerBalance[staker];
-    }
-
-    function getOperatorBalance(address operator) public view returns (uint256) {
-        return operatorBalance[operator];
     }
 
     function getTokenAddress() public view returns (address){
@@ -218,9 +142,7 @@ contract TokenPool {
         return i_owner;
     }
 
-    function getOperatorSlashers(address operator) public view returns(address[] memory){
-        return slasher[operator];
-    }
+    
 }
 // in this model a home staker has to stake and delegate to itself to contribute to eigen layer
 // since the enroll function is access controlled to operators only, delegation is mandatory to a staker
