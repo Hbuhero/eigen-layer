@@ -1,0 +1,46 @@
+// SPDX-License-Identifier: SEE LICENSE IN LICENSE
+pragma solidity ^0.8.19;
+
+import {DelegationManager} from "./DelegationManager.sol";
+
+error Slasher__NotOwner();
+
+/**
+ * @title Slasher Contract
+ * @author Hud Saidi
+ * @notice This contract mimicks the external service (AVS) contract that is able to slash stakers for misconduct.
+ * Each AVS has its own slashing conditions, hence this contract tells TokenPool contract that a certain staker
+ * in the layer is malicious in this AVS. 
+ */
+contract Slasher {
+    address public immutable i_owner;
+    address private immutable i_delegationManager;
+    
+    mapping (address operator => bool slashed) private isSlashed;
+
+    modifier onlyOwner(){
+        if (msg.sender != i_owner) revert Slasher__NotOwner();
+        _;
+    }
+
+    constructor (address delegationManager) {
+        i_owner = msg.sender;
+        i_delegationManager = delegationManager;
+    }
+
+    /**
+     * 
+     * @notice This slash function assumes a trusted entity with permission to slash. A more decentralized approach
+     * will be submitting and verifying proof about the misconduct of the staker
+     */
+    function slash(address operator) public onlyOwner{
+        isSlashed[operator] = true;
+        DelegationManager(i_delegationManager).slash(operator);
+    }
+
+    function isOperatorSlashed(address operator) public view returns(bool){
+        return isSlashed[operator];
+    }
+
+    
+}
